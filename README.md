@@ -1,6 +1,6 @@
 # semiconductor-physics-engine
 a semiconductor physics engine to view the concept as a visual
-# Semiconductor Physics Engine
+https://rudralimbachiya.github.io/semiconductor-physics-engine/
 
 An interactive educational simulator for exploring semiconductor
 band structure, carrier statistics, doping, temperature, photon
