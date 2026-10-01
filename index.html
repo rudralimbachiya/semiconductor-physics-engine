@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semiconductor Physics Engine</title>
+<style>
+    :root {
+        --bg: #F7F5F0; --surface: #FFFFFF; --text: #2C2A28; --text-light: #6B6863;
+        --border: #D8D4CA; --valence: rgba(214, 93, 75, 0.15); --valence-stroke: #D65D4B;
+        --conduction: rgba(74, 155, 140, 0.15); --conduction-stroke: #4A9B8C;
+        --electron: #D4A373; --track: #EAE6DA; --fermi: #8B949E;
+    }
+    body { font-family: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 40px 20px; margin: 0; overflow-y: scroll; line-height: 1.6; }
+    
+    .layout-wrapper { display: flex; gap: 24px; max-width: 1400px; width: 100%; align-items: flex-start; margin-bottom: 40px; }
+    @media (max-width: 900px) { .layout-wrapper { flex-direction: column; } .canvas-container, .sidebar { width: 100%; box-sizing: border-box; } }
+    
+    .canvas-container { background: var(--surface); padding: 24px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.03); flex: 2; min-width: 0; position: relative; }
+    #canvasWrapper { width: 100%; height: 500px; position: relative; }
+    canvas { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; display: block; position: absolute; top: 0; left: 0; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+    
+    .hud { position: absolute; top: 24px; right: 32px; display: flex; gap: 32px; font-family: -apple-system, sans-serif; z-index: 10; }
+    .hud-metric { display: flex; flex-direction: column; align-items: flex-end; }
+    .hud span { font-size: 11px; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 2px; }
+    .hud .value { font-size: 20px; font-weight: bold; font-family: monospace; color: var(--text); }
+    .hud .highlight { color: var(--conduction-stroke); }
+    
+    .sidebar { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 300px; font-family: -apple-system, sans-serif; }
+    .controls-panel, .learning-panel { background: var(--surface); padding: 24px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.03); }
+    .control-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; padding: 10px; border-radius: 6px; transition: background 0.2s ease; }
+    .control-group:hover { background: rgba(0,0,0,0.02); }
+    .control-group:last-child { margin-bottom: 0; }
+    
+    .label-row { display: flex; justify-content: space-between; align-items: center; }
+    label { font-size: 13px; font-weight: 600; color: var(--text); }
+    
+    .input-wrap { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-light); }
+    .editable-num { width: 50px; background: transparent; border: 1px dashed var(--border); border-radius: 4px; color: var(--text); font-family: monospace; font-size: 14px; text-align: right; padding: 2px 4px; outline: none; transition: border-color 0.2s; }
+    .editable-num:focus { border: 1px solid var(--conduction-stroke); background: var(--bg); }
+    .editable-num::-webkit-outer-spin-button, .editable-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .editable-num[type=number] { -moz-appearance: textfield; }
+    .doping-builder { display:flex; flex-direction:column; gap:8px; }
+    .doping-builder .input-wrap { flex-wrap:wrap; }
+    .doping-builder select { width:auto; min-width:58px; padding:3px 5px; }
+    .preset-row { display:flex; gap:5px; flex-wrap:wrap; }
+    .preset-row button { border:1px solid var(--border); background:var(--bg); color:var(--text); border-radius:4px; padding:4px 7px; cursor:pointer; font:12px monospace; }
+    .preset-row button:hover { border-color:var(--conduction-stroke); }
+
+    select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; }
+    input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; height: 24px; margin: 0; cursor: pointer; }
+    input[type=range]:focus { outline: none; }
+    input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: var(--track); border-radius: 4px; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%; background: var(--conduction-stroke); margin-top: -6px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.1s ease; }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+    #biasSlider::-webkit-slider-thumb { background: #8e44ad; }
+    #tempSlider::-webkit-slider-thumb { background: var(--valence-stroke); }
+    #popSlider::-webkit-slider-thumb { background: var(--electron); }
+
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: .2s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--conduction-stroke); }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    .learning-panel { height: 180px; box-sizing: border-box; overflow-y: auto; }
+    .learning-panel h3 { margin: 0 0 10px 0; font-family: "Palatino Linotype", Georgia, serif; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .learning-panel p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-light); }
+
+    .carrier-tooltip { position: fixed; display: none; width: 240px; padding: 12px 14px; background: rgba(255,255,255,0.97); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.10); font-family: -apple-system, sans-serif; font-size: 12px; line-height: 1.5; color: var(--text); pointer-events: none; z-index: 50; }
+    .carrier-tooltip strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    .theory-section { max-width: 1400px; width: 100%; background: var(--surface); padding: 40px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.03); box-sizing: border-box; margin-bottom: 30px; }
+    .theory-section h2 { font-size: 22px; font-weight: normal; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+    .theory-section h3 { font-size: 16px; font-weight: normal; margin-top: 30px; margin-bottom: 12px; color: var(--text); }
+    .theory-section p { font-size: 15px; margin-bottom: 20px; color: var(--text-light); }
+    .formula-box { background: var(--bg); padding: 20px; border-radius: 4px; font-family: monospace; font-size: 14px; border: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; color: var(--text); }
+    .advanced-toggle { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 15px; font-family: -apple-system, sans-serif; font-weight: 600; }
+    
+    footer { font-family: -apple-system, sans-serif; font-size: 13px; color: var(--text-light); text-align: center; margin-bottom: 40px; }
+    footer a { color: var(--conduction-stroke); text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="layout-wrapper">
+    <div class="canvas-container">
+        <div class="hud">
+            <div class="hud-metric">
+                <span>Drift Current (I<sub>d</sub>)</span>
+                <div class="value highlight" id="ammeter">0.00 mA</div>
+            </div>
+            <div class="hud-metric">
+                <span>Peak Emission (&lambda;)</span>
+                <div class="value" id="wavelengthMeter">-- nm</div>
+            </div>
+        </div>
+        <div id="canvasWrapper"><canvas id="simCanvas"></canvas></div>
+        <div id="carrierTooltip" class="carrier-tooltip"></div>
+    </div>
+    
+    <div class="sidebar">
+        <div class="controls-panel">
+            <div class="control-group" data-topic="material">
+                <label>Intrinsic Band Gap</label>
+                <select id="materialSelect">
+                    <option value="0.17">Indium Antimonide (InSb) - 0.17 eV</option>
+                    <option value="0.27">Lead Selenide (PbSe) - 0.27 eV</option>
+                    <option value="0.35">Indium Arsenide (InAs) - 0.35 eV</option>
+                    <option value="0.67">Germanium (Ge) - 0.67 eV</option>
+                    <option value="1.11" selected>Silicon (Si) - 1.11 eV</option>
+                    <option value="1.43">Gallium Arsenide (GaAs) - 1.43 eV</option>
+                    <option value="2.36">Silicon Carbide (SiC) - 2.36 eV</option>
+                    <option value="3.37">Zinc Oxide (ZnO) - 3.37 eV</option>
+                    <option value="3.40">Gallium Nitride (GaN) - 3.40 eV</option>
+                    <option value="5.50">Diamond (C) - 5.50 eV</option>
+                    <option value="6.01">Aluminum Nitride (AlN) - 6.01 eV</option>
+                </select>
+            </div>
+
+            <div class="control-group" data-topic="doping">
+                <label>Doping Profile</label>
+                <select id="dopingSelect">
+                    <option value="none" selected>Intrinsic (Pure)</option>
+                    <option value="n">N-Type (Donor Impurities)</option>
+                    <option value="p">P-Type (Acceptor Impurities)</option>
+                </select>
+                <div class="label-row" style="margin-top:4px;">
+                    <label>Doping Concentration</label>
+                    <div class="doping-builder">
+                    <div class="input-wrap"><input type="number" class="editable-num" id="dopingMantissa" value="1.0" min="1" max="9.99" step="0.1" aria-label="Doping mantissa"><span>× 10</span><select id="dopingExponent" aria-label="Doping exponent"></select><span>cm⁻³</span></div>
+                    <div class="preset-row"><button type="button" data-doping="1e14">10¹⁴</button><button type="button" data-doping="1e15">10¹⁵</button><button type="button" data-doping="1e16">10¹⁶</button><button type="button" data-doping="1e17">10¹⁷</button><button type="button" data-doping="1e18">10¹⁸</button></div>
+                </div>
+                </div>
+            </div>
+            
+            <div class="control-group" data-topic="energy">
+                <div class="label-row">
+                    <label>Excitation Photon Energy</label>
+                    <div class="input-wrap"><input type="number" class="editable-num" id="energyNum" value="0.00" min="0" max="6.5" step="0.01"> eV</div>
+                </div>
+                <input type="range" id="energySlider" min="0" max="6.5" step="0.01" value="0">
+            </div>
+
+            <div class="control-group" data-topic="temp">
+                <div class="label-row">
+                    <label>Lattice Temperature</label>
+                    <div class="input-wrap"><input type="number" class="editable-num" id="tempNum" value="300" min="0" max="600" step="10"> K</div>
+                </div>
+                <input type="range" id="tempSlider" min="0" max="600" step="10" value="300">
+            </div>
+            
+            <div class="control-group" data-topic="bias">
+                <div class="label-row">
+                    <label>External Voltage Bias</label>
+                    <div class="input-wrap"><input type="number" class="editable-num" id="biasNum" value="0" min="-5" max="100" step="0.1"> V</div>
+                </div>
+                <input type="range" id="biasSlider" min="-5" max="5" step="0.1" value="0">
+            </div>
+
+            <div class="control-group" data-topic="population">
+                <div class="label-row">
+                    <label>Carrier Samples (visual)</label>
+                    <div class="input-wrap"><input type="number" class="editable-num" id="popNum" value="45" min="5" max="250" step="1"></div>
+                </div>
+                <input type="range" id="popSlider" min="5" max="250" step="1" value="45">
+            </div>
+
+            <div class="control-group" data-topic="fermi">
+                <div class="label-row">
+                    <label>Show Fermi Level (E<sub>F</sub>)</label>
+                    <label class="switch"><input type="checkbox" id="fermiToggle"><span class="slider"></span></label>
+                </div>
+            </div>
+        </div>
+
+        <div class="learning-panel">
+            <h3 id="infoTitle">Observation Deck</h3>
+            <p id="infoText">Interact with the controls. Quantitative outputs are calculated from the semiconductor transport model; carrier motion is illustrative.</p>
+        </div>
+    </div>
+</div>
+
+<div class="theory-section">
+    <h2>Semiconductor Mechanics & Band Theory</h2>
+    <p><strong>Model:</strong> The engine uses temperature-dependent band gap, intrinsic carrier concentration, charge neutrality, Fermi–Dirac carrier statistics with simplified shallow-impurity ionization, electric field from device geometry, and low-field drift transport. The animated carriers are visual samples and are not individual microscopic trajectories.</p>
+    <p><strong>Drift direction:</strong> For a given electric field, conduction-band electrons drift opposite to the field because they are negatively charged; holes drift in the field direction because they behave as positive charge carriers. The two carrier motions therefore contribute to conventional current in the same direction.</p>
+    <p><strong>The Forbidden Gap:</strong> In a crystalline solid, electrons act as waves diffracted by the periodic lattice. At specific energy levels, destructive Bragg interference occurs, canceling out the electron waves. Because no valid quantum state (solution to the Schrödinger equation) exists in this region, electrons cannot occupy it.</p>
+    
+    <label class="advanced-toggle"><input type="checkbox" id="advancedToggle"> Show Advanced Mathematical Models</label>
+    
+    <div id="advancedContent" style="display: none; margin-top: 20px;">
+        <div class="formula-box"><strong>5. Charge Neutrality</strong><br><br>n + N<sub>A</sub><sup>−</sup> = p + N<sub>D</sub><sup>+</sup><br><br><em>The equilibrium solver enforces charge neutrality using Fermi–Dirac statistics and simplified donor/acceptor ionization. This is still a bulk educational model, not a self-consistent TCAD solution.</em></div>
+        <h3>Relevant Governing Equations</h3>
+        
+        <div class="formula-box">
+            <strong>1. Varshni Equation (Temperature-Dependent Band Gap)</strong><br><br>
+            E<sub>g</sub>(T) = E<sub>g</sub>(0) - [ (&alpha;T<sup>2</sup>) / (T + &beta;) ]<br><br>
+            <em>The engine uses this empirical relation to calculate the band gap at the selected lattice temperature. Material-specific α and β parameters are stored in the material model.</em>
+        </div>
+
+        <div class="formula-box">
+            <strong>2. Planck-Einstein Relation (Band-to-Band Photon)</strong><br><br>
+            &lambda; = hc / E &asymp; 1240 / E<sub>g</sub><br><br>
+            <em>For the simplified radiative-recombination model, the emitted photon energy is taken as approximately the band gap. This is an idealization; indirect-gap materials such as silicon are inefficient light emitters.</em>
+        </div>
+
+        <div class="formula-box">
+            <strong>3. Fermi–Dirac Carrier Statistics</strong><br><br>
+            n = N<sub>C</sub> F<sub>1/2</sub>[(E<sub>F</sub> - E<sub>C</sub>)/(k<sub>B</sub>T)] &nbsp;&nbsp; and &nbsp;&nbsp; p = N<sub>V</sub> F<sub>1/2</sub>[(E<sub>V</sub> - E<sub>F</sub>)/(k<sub>B</sub>T)]<br><br>
+            <em>The engine numerically evaluates a normalized Fermi–Dirac F<sub>1/2</sub> integral and solves charge neutrality with simplified donor/acceptor ionization. The Maxwell–Boltzmann expression is recovered only in the non-degenerate limit.</em>
+        </div>
+
+        <div class="formula-box">
+            <strong>4. Low-Field Drift Current Density</strong><br><br>
+            J = qn&mu;<sub>e</sub>E + qp&mu;<sub>h</sub>E<br><br>
+            <em>The engine calculates J from the carrier concentrations, temperature-adjusted mobilities, and electric field. Device current is then I = J A using the defined device cross-section.</em>
+        </div>
+    </div>
+</div>
+
+<footer>by rudra limbachiya: Semiconductor Physics Engine. Originally uploaded on <a href="https://github.com/" target="_blank">GitHub</a>.</footer>
+
+<script>
+    document.getElementById('advancedToggle').addEventListener('change', e => document.getElementById('advancedContent').style.display = e.target.checked ? 'block' : 'none');
+
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('canvasWrapper');
+    
+    let logicalWidth = wrapper.clientWidth;
+    const logicalHeight = 500;
+    const dpr = window.devicePixelRatio || 1;
+    
+    function resizeCanvas() {
+        logicalWidth = wrapper.clientWidth;
+        canvas.width = logicalWidth * dpr;
+        canvas.height = logicalHeight * dpr;
+        canvas.style.width = `${logicalWidth}px`;
+        canvas.style.height = `${logicalHeight}px`;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    
+    // ---------- Physical model ----------
+    // SI is used internally for transport. Semiconductor concentrations are stored in cm^-3
+    // because that is the conventional unit for semiconductor device parameters.
+    const q = 1.602176634e-19;
+    const kB_eV = 8.617333262e-5;
+    const h = 6.62607015e-34;
+    const c = 299792458;
+    const DEVICE_LENGTH_M = 100e-6;
+    const DEVICE_AREA_M2 = 1e-8;
+
+    const materials = {
+        Si:   { eg0: 1.17, alpha: 4.73e-4, beta: 636, Nc300: 2.8e19, Nv300: 1.04e19, muN300: 1350, muP300: 480, muExp: 2.4, direct: false },
+        Ge:   { eg0: 0.743, alpha: 4.77e-4, beta: 235, Nc300: 1.04e19, Nv300: 6.0e18, muN300: 3900, muP300: 1900, muExp: 1.7, direct: false },
+        GaAs: { eg0: 1.519, alpha: 5.405e-4, beta: 204, Nc300: 4.7e17, Nv300: 7.0e18, muN300: 8500, muP300: 400, muExp: 1.0, direct: true },
+        InAs: { eg0: 0.417, alpha: 2.76e-4, beta: 93, Nc300: 8.6e16, Nv300: 1.0e19, muN300: 30000, muP300: 450, muExp: 1.0, direct: true },
+        InSb: { eg0: 0.235, alpha: 2.7e-4, beta: 150, Nc300: 6.0e16, Nv300: 8.0e18, muN300: 77000, muP300: 850, muExp: 1.5, direct: true },
+        PbSe: { eg0: 0.278, alpha: 4.0e-4, beta: 150, Nc300: 2.0e18, Nv300: 2.0e18, muN300: 1000, muP300: 700, muExp: 1.5, direct: false },
+        SiC:  { eg0: 2.53, alpha: 6.5e-4, beta: 1573, Nc300: 1.6e19, Nv300: 2.5e19, muN300: 900, muP300: 120, muExp: 2.2, direct: false },
+        ZnO:  { eg0: 3.44, alpha: 5.3e-4, beta: 700, Nc300: 3.0e18, Nv300: 1.8e19, muN300: 200, muP300: 20, muExp: 1.5, direct: true },
+        GaN:  { eg0: 3.51, alpha: 9.1e-4, beta: 830, Nc300: 2.3e18, Nv300: 4.6e19, muN300: 1200, muP300: 25, muExp: 2.0, direct: true },
+        C:    { eg0: 5.50, alpha: 5.5e-4, beta: 1200, Nc300: 1.0e19, Nv300: 1.0e19, muN300: 1800, muP300: 1200, muExp: 2.0, direct: false },
+        AlN:  { eg0: 6.20, alpha: 6.5e-4, beta: 1462, Nc300: 2.3e18, Nv300: 4.0e19, muN300: 300, muP300: 10, muExp: 2.0, direct: true }
+    };
+    // Keep the material labels already present in the UI, but attach a compact physical model.
+    materials.SiC.direct = false; materials.C.direct = false;
+
+    const elements = {
+        material: document.getElementById('materialSelect'), doping: document.getElementById('dopingSelect'),
+        dopingMantissa: document.getElementById('dopingMantissa'), dopingExponent: document.getElementById('dopingExponent'), fermiToggle: document.getElementById('fermiToggle'),
+        infoTitle: document.getElementById('infoTitle'), infoText: document.getElementById('infoText'),
+        ammeter: document.getElementById('ammeter'), waveMeter: document.getElementById('wavelengthMeter')
+    };
+
+    function materialKey() {
+        const label = elements.material.options[elements.material.selectedIndex].text;
+        if (label.startsWith('Silicon (Si)')) return 'Si';
+        if (label.startsWith('Germanium (Ge)')) return 'Ge';
+        if (label.startsWith('Gallium Arsenide')) return 'GaAs';
+        if (label.startsWith('Indium Arsenide')) return 'InAs';
+        if (label.startsWith('Indium Antimonide')) return 'InSb';
+        if (label.startsWith('Lead Selenide')) return 'PbSe';
+        if (label.startsWith('Silicon Carbide')) return 'SiC';
+        if (label.startsWith('Zinc Oxide')) return 'ZnO';
+        if (label.startsWith('Gallium Nitride')) return 'GaN';
+        if (label.startsWith('Aluminum Nitride')) return 'AlN';
+        return 'C';
+    }
+
+    function syncInputs(sliderId, numId) {
+        const slider = document.getElementById(sliderId), num = document.getElementById(numId);
+        slider.addEventListener('input', () => { num.value = slider.value; });
+        num.addEventListener('input', () => {
+            let val = parseFloat(num.value); if (isNaN(val)) return;
+            val = Math.max(parseFloat(num.min), Math.min(parseFloat(num.max), val));
+            // Normal controls mirror the numeric input to the slider. Bias is special:
+            // its numeric input may exceed the slider range.
+            if (sliderId !== 'biasSlider') slider.value = val;
+        });
+        return { slider, num };
+    }
+    const energyCtrl = syncInputs('energySlider', 'energyNum');
+    const biasCtrl = syncInputs('biasSlider', 'biasNum');
+    // Voltage is intentionally decoupled from the visual slider: the slider remains
+    // limited to +/-5 V, while the numeric field accepts a wider engineering range.
+    biasCtrl.num.min = '-100';
+    biasCtrl.num.max = '100';
+    biasCtrl.num.step = '0.1';
+    biasCtrl.num.addEventListener('input', () => {
+        const v = parseFloat(biasCtrl.num.value);
+        if (!Number.isFinite(v)) return;
+        // Keep the slider visually meaningful without clipping the actual voltage.
+        biasCtrl.slider.value = Math.max(-5, Math.min(5, v));
+    });
+    const tempCtrl = syncInputs('tempSlider', 'tempNum');
+    tempCtrl.num.min='0'; tempCtrl.num.max='600';
+    tempCtrl.num.addEventListener('input',()=>{ const t=parseFloat(tempCtrl.num.value); if(Number.isFinite(t)) tempCtrl.slider.value=Math.max(0,Math.min(600,Math.round(t/10)*10)); });
+    const popCtrl = syncInputs('popSlider', 'popNum');
+
+    const dopingExponentValues = Array.from({length:10},(_,i)=>10+i);
+    dopingExponentValues.forEach(exp=>{ const o=document.createElement('option'); o.value=exp; o.textContent=exp; elements.dopingExponent.appendChild(o); });
+    elements.dopingExponent.value='16';
+    function getDopingConcentration(){
+        const mantissa=Math.max(1,Math.min(9.99,parseFloat(elements.dopingMantissa.value)||1));
+        const exponent=Math.max(10,Math.min(19,parseInt(elements.dopingExponent.value)||16));
+        return mantissa*Math.pow(10,exponent);
+    }
+    function setDopingConcentration(value){
+        if(!(value>0)) return;
+        let exponent=Math.floor(Math.log10(value));
+        let mantissa=value/Math.pow(10,exponent);
+        if(mantissa>=9.99){ mantissa=1; exponent+=1; }
+        exponent=Math.max(12,Math.min(19,exponent));
+        mantissa=Math.min(9.99,Math.max(1,Number(mantissa.toPrecision(3))));
+        elements.dopingExponent.value=String(exponent);
+        elements.dopingMantissa.value=mantissa.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+    }
+    function normalizeDopingInput(){
+        let mantissa=parseFloat(elements.dopingMantissa.value);
+        let exponent=parseInt(elements.dopingExponent.value);
+        if(!Number.isFinite(mantissa)) mantissa=1;
+        if(!Number.isFinite(exponent)) exponent=16;
+        let value=Math.max(1,Math.min(9.99,mantissa))*Math.pow(10,Math.max(12,Math.min(19,exponent)));
+        setDopingConcentration(value);
+        resetPopulation();
+    }
+    elements.dopingMantissa.addEventListener('change',normalizeDopingInput);
+    elements.dopingExponent.addEventListener('change',normalizeDopingInput);
+    document.querySelectorAll('[data-doping]').forEach(btn=>btn.addEventListener('click',()=>{setDopingConcentration(Number(btn.dataset.doping)); resetPopulation();}));
+
+    // --- Equilibrium statistics -------------------------------------------------
+    // The original version used Maxwell-Boltzmann statistics everywhere. That is
+    // fine for dilute, non-degenerate material, but it becomes inaccurate when a
+    // carrier density approaches the effective density of states and at cryogenic
+    // temperatures. This version uses a numerically evaluated, normalized Fermi-
+    // Dirac F_{1/2} integral and solves charge neutrality self-consistently.
+    const FD_CACHE = new Map();
+    const SQRT_PI = Math.sqrt(Math.PI);
+    function fdHalf(eta){
+        // Normalized F_{1/2}(eta) = (2/sqrt(pi)) integral_0^inf sqrt(e)/(1+exp(e-eta)) de.
+        // In the non-degenerate tail this is exp(eta); for very large eta use the
+        // leading Sommerfeld term. The numerical middle is cached because getModel
+        // is evaluated repeatedly by the animation loop.
+        const key = Math.round(eta*1000)/1000;
+        if(FD_CACHE.has(key)) return FD_CACHE.get(key);
+        let value;
+        if(eta < -8){
+            value = Math.exp(eta);
+        } else if(eta > 30){
+            value = (4/(3*SQRT_PI))*Math.pow(eta,1.5);
+        } else {
+            const xmax = Math.sqrt(Math.max(35, eta + 35));
+            const N = 80;
+            const hstep = xmax/N;
+            let sum = 0;
+            for(let i=0;i<=N;i++){
+                const x=i*hstep;
+                const exponent=x*x-eta;
+                let occ;
+                if(exponent>40) occ=Math.exp(-exponent);
+                else if(exponent<-40) occ=1;
+                else occ=1/(1+Math.exp(exponent));
+                const f=x*x*occ;
+                sum += (i===0||i===N ? 1 : (i%2===0 ? 2 : 4))*f;
+            }
+            value=(4/SQRT_PI)*(hstep/3)*sum;
+        }
+        FD_CACHE.set(key,value);
+        if(FD_CACHE.size>20000){ const first=FD_CACHE.keys().next().value; FD_CACHE.delete(first); }
+        return value;
+    }
+
+    function solveEquilibrium(m,T,Nd,Na,Nc,Nv,Eg){
+        if(T===0){
+            // The exact T=0 limit is material/dopant-model dependent. We use a
+            // conservative educational boundary: intrinsic material has no mobile
+            // thermal carriers; finite shallow doping is treated as frozen out.
+            const Ef0 = Nd>Na ? Eg : (Na>Nd ? 0 : Eg/2);
+            return {n:0,p:0,NdIon:0,NaIon:0,Ef:Ef0,degenerate:false};
+        }
+
+        const kT=kB_eV*T;
+        // Shallow impurity levels are deliberately labeled illustrative in the UI.
+        // 45 meV is a representative educational value, not a universal dopant.
+        const donorIon=0.045;
+        const acceptorIon=0.045;
+        const donorDeg=2;
+        const acceptorDeg=4;
+        const Ed=Eg-donorIon;
+        const Ea=acceptorIon;
+
+        function state(Ef){
+            const etaN=(Ef-Eg)/kT;
+            const etaP=(-Ef)/kT;
+            const n=Nc*fdHalf(etaN);
+            const p=Nv*fdHalf(etaP);
+            const dExp=Math.max(-60,Math.min(60,(Ef-Ed)/kT));
+            const aExp=Math.max(-60,Math.min(60,(Ea-Ef)/kT));
+            const NdIon=Nd/(1+donorDeg*Math.exp(dExp));
+            const NaIon=Na/(1+acceptorDeg*Math.exp(aExp));
+            return {n,p,NdIon,NaIon,residual:n+NaIon-p-NdIon};
+        }
+
+        // Charge neutrality is monotonic in Ef. Bisection is slower than a closed
+        // form but robust across intrinsic, freeze-out and degenerate regimes.
+        let lo=-1, hi=Eg+1;
+        let flo=state(lo).residual, fhi=state(hi).residual;
+        for(let i=0;i<55;i++){
+            const mid=(lo+hi)/2;
+            const sm=state(mid);
+            if(sm.residual>0) hi=mid; else lo=mid;
+        }
+        const Ef=(lo+hi)/2;
+        const out=state(Ef);
+        const degenerate=(out.n/Nc>0.1)||(out.p/Nv>0.1);
+        return {...out,Ef,degenerate};
+    }
+
+    let modelCacheKey='', modelCache=null;
+    function getModel() {
+        const m = materials[materialKey()];
+        const rawT = parseFloat(tempCtrl.num.value);
+        const T = Number.isFinite(rawT) ? Math.max(0, Math.min(600, rawT)) : 300;
+        const Eg = Math.max(0.01, m.eg0 - (T === 0 ? 0 : m.alpha * T * T / (T + m.beta)));
+        const Nc = T === 0 ? 0 : m.Nc300 * Math.pow(T / 300, 1.5);
+        const Nv = T === 0 ? 0 : m.Nv300 * Math.pow(T / 300, 1.5);
+        const dopingConcentration = getDopingConcentration();
+        const Nd = elements.doping.value === 'n' ? dopingConcentration : 0;
+        const Na = elements.doping.value === 'p' ? dopingConcentration : 0;
+        const V = Number.isFinite(parseFloat(biasCtrl.num.value)) ? parseFloat(biasCtrl.num.value) : 0;
+        const key=[materialKey(),T,Nd,Na,V].join('|');
+        if(key===modelCacheKey && modelCache) return modelCache;
+
+        const intrinsicEq = solveEquilibrium(m,T,0,0,Nc,Nv,Eg);
+        const ni = intrinsicEq.n;
+        const eq=solveEquilibrium(m,T,Nd,Na,Nc,Nv,Eg);
+        // Temperature power laws are intentionally retained as a compact educational
+        // mobility model. At low T, cap the extrapolation to avoid an unphysical
+        // divergence; impurity/phonon scattering is not solved self-consistently.
+        const muN = T === 0 ? 0 : m.muN300 * Math.pow(Math.max(T,50) / 300, -m.muExp);
+        const muP = T === 0 ? 0 : m.muP300 * Math.pow(Math.max(T,50) / 300, -m.muExp);
+        const E_Vcm = (V / DEVICE_LENGTH_M) / 100; // V/cm
+        const J_Acm2 = q * (eq.n * muN + eq.p * muP) * E_Vcm;
+        const I_A = J_Acm2 * (DEVICE_AREA_M2 * 1e4); // cm^2
+        const electronDriftVelocity_cm_s = -muN * E_Vcm;
+        const holeDriftVelocity_cm_s = muP * E_Vcm;
+        const wavelength = 1240 / Eg;
+        modelCacheKey=key;
+        modelCache={m,T,Eg,Nc,Nv,ni,Nd,Na,n:eq.n,p:eq.p,NdIon:eq.NdIon,NaIon:eq.NaIon,muN,muP,V,E_Vcm,J_Acm2,I_A,electronDriftVelocity_cm_s,holeDriftVelocity_cm_s,Ef:eq.Ef,wavelength,degenerate:eq.degenerate};
+        return modelCache;
+    }
+
+    function formatSci(x) { return x === 0 ? '0' : x.toExponential(2).replace('e+', 'e'); }
+    function getPhotonColor(nm) {
+        let r=0,g=0,b=0,alpha=1;
+        if(nm>=380&&nm<440){r=-(nm-440)/60;b=1;} else if(nm<490){g=(nm-440)/50;b=1;} else if(nm<510){g=1;b=-(nm-510)/20;} else if(nm<580){r=(nm-510)/70;g=1;} else if(nm<645){r=1;g=-(nm-645)/65;} else if(nm<=780){r=1;} else {r=1;g=.2;b=.2;alpha=.25;}
+        return {r:Math.round(r*255),g:Math.round(g*255),b:Math.round(b*255),a:alpha};
+    }
+
+    const hoverText = {
+        default:{title:'Observation Deck',text:'The outputs are calculated from the semiconductor transport model. Carrier motion is illustrative.'},
+        energy:{title:'Excitation Photon Energy',text:'This is the energy of an absorbed photon. When Eₚₕ ≥ E₉, a valence-band electron can be promoted into the conduction band. Lower it below E₉ and excited electrons recombine in this simplified model.'},
+        bias:{title:'External Voltage Bias',text:'Electric field is calculated from E = V / L. Electrons drift opposite the electric field; holes drift with it. Voltage drives drift along the bands and does not by itself promote carriers across the band gap. Use Applied Energy for inter-band excitation.'},
+        doping:{title:'Extrinsic Doping',text:'Doping changes the majority-carrier concentration and shifts the equilibrium Fermi level. Donor/acceptor levels and impurity markers are shown on the band diagram; the carrier-sample count remains a separate visual setting.'},
+        fermi:{title:'Fermi Level (E_F)',text:'The equilibrium Fermi level is obtained from the Fermi–Dirac carrier statistics and charge-neutrality solver. For intrinsic material it lies near the middle of the band gap.'},
+        temp:{title:'Lattice Temperature',text:'Temperature changes the band gap, density of states, intrinsic carrier concentration and mobility in the model. At 0 K the simulator applies an explicit boundary condition rather than evaluating the finite-temperature transport formulas at T=0.'},
+        population:{title:'Carrier Samples',text:'This controls only the number of animated carrier samples. It does not change the calculated carrier concentration.'}
+    };
+    document.querySelectorAll('.control-group').forEach(group=>{
+        group.addEventListener('mouseenter',()=>{const topic=group.dataset.topic; elements.infoTitle.innerText=topic==='material'?'Material Settings':hoverText[topic].title; elements.infoText.innerText=topic==='material'?`Band gap model: ${materialKey()} with temperature dependence.`:hoverText[topic].text;});
+        group.addEventListener('mouseleave',()=>{elements.infoTitle.innerText=hoverText.default.title;elements.infoText.innerText=hoverText.default.text;});
+    });
+
+    const VALENCE_Y = 380, CONDUCTION_Y = 120, BAND_HEIGHT = 70;
+    let electrons=[], photons=[], draggedElectron=null, hoveredCarrier=null;
+    const carrierTooltip=document.getElementById('carrierTooltip');
+    let lattice=Array.from({length:40},()=>({x:Math.random(),yBase:Math.random()*logicalHeight,phase:Math.random()*10}));
+
+    // Visual carriers are educational samples, not literal particle counts.
+    // Each electron begins in the valence band. When the supplied photon energy
+    // reaches the band gap, it can be promoted into the conduction band.
+    function generateElectron(){
+        return {
+            type:'electron', xRatio:Math.random(), yRatio:Math.random(),
+            holeXRatio:Math.random(), holeYRatio:Math.random(),
+            smoothY:VALENCE_Y + 10 + Math.random()*(BAND_HEIGHT-20),
+            currentX:0, currentY:0, holeX:0, holeY:0,
+            excited:false, transition:0, holeVisible:false,
+            phase:Math.random()*Math.PI*2
+        };
+    }
+
+    function resetPopulation(){
+        electrons=[];
+        const count=parseInt(popCtrl.slider.value)||45;
+        for(let i=0;i<count;i++) electrons.push(generateElectron());
+    }
+    function updatePopulation(){
+        const target=parseInt(popCtrl.slider.value)||0;
+        while(electrons.length<target) electrons.push(generateElectron());
+        if(electrons.length>target) electrons.length=target;
+    }
+    elements.doping.addEventListener('change',resetPopulation);
+    elements.material.addEventListener('change',resetPopulation);
+    
+    popCtrl.slider.addEventListener('input',updatePopulation);
+    popCtrl.num.addEventListener('input',updatePopulation);
+
+    function spawnPhoton(x,y,color){photons.push({x,y,vx:(Math.random()>.5?1:-1)*(2+Math.random()*2),vy:(Math.random()-.5)*2,life:1,phase:Math.random()*Math.PI*2,color});}
+    canvas.addEventListener('mousedown',e=>{const r=canvas.getBoundingClientRect();draggedElectron=electrons.find(el=>Math.hypot(el.currentX-(e.clientX-r.left),el.currentY-(e.clientY-r.top))<20);});
+    window.addEventListener('mousemove',e=>{
+        const r=canvas.getBoundingClientRect();
+        if(draggedElectron){draggedElectron.smoothY=Math.max(10,Math.min(logicalHeight-10,e.clientY-r.top));return;}
+        const x=e.clientX-r.left,y=e.clientY-r.top;
+        let hit=null, hitType='electron';
+        for(const el of electrons){
+            if(Math.hypot(el.currentX-x,el.currentY-y)<14){ hit=el; hitType='electron'; break; }
+            if(el.holeVisible && Math.hypot(el.holeX-x,el.holeY-y)<14){ hit=el; hitType='hole'; break; }
+        }
+        hoveredCarrier=hit;
+        if(hoveredCarrier){
+            const title=hitType==='hole'
+                ?'Valence-band hole'
+                :(hoveredCarrier.excited?'Conduction-band electron':'Valence-band electron');
+            const text=hitType==='hole'
+                ?'This hole is the missing valence-band electron left by excitation. It behaves as a positive charge carrier and drifts opposite to the electron under the same electric field.'
+                :(hoveredCarrier.excited
+                    ?'This electron has absorbed enough photon energy to cross the band gap and occupy a conduction-band state. It is a free carrier and contributes to electron drift current.'
+                    :'This electron is in the valence band. When the supplied photon energy reaches the band gap, it can be promoted into the conduction band, leaving a hole behind.');
+            carrierTooltip.innerHTML=`<strong>${title}</strong>${text}`;
+            carrierTooltip.style.display='block';
+            carrierTooltip.style.left=`${e.clientX+16}px`;
+            carrierTooltip.style.top=`${e.clientY+16}px`;
+        }else carrierTooltip.style.display='none';
+    });
+    window.addEventListener('mouseup',()=>draggedElectron=null);
+    window.addEventListener('mouseleave',()=>{draggedElectron=null;hoveredCarrier=null;carrierTooltip.style.display='none';});
+    function getBandY(base,xRatio,tilt){return base+(xRatio-.5)*tilt;}
+    function drawTiltedBand(base,tilt,x,w,color,stroke,label){ctx.fillStyle=color;ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,getBandY(base,0,tilt));ctx.lineTo(x+w,getBandY(base,1,tilt));ctx.lineTo(x+w,getBandY(base,1,tilt)+BAND_HEIGHT);ctx.lineTo(x,getBandY(base,0,tilt)+BAND_HEIGHT);ctx.closePath();ctx.fill();ctx.stroke();ctx.fillStyle='#3D3B38';ctx.font='600 14px -apple-system, sans-serif';ctx.fillText(label,x+10,getBandY(base,0,tilt)-12);}
+
+    function draw(){
+        ctx.clearRect(0,0,logicalWidth,logicalHeight);
+        const model=getModel();
+        const bandScale=150;
+        const gapPx=Math.min(360,Math.max(24,model.Eg*bandScale));
+        const conductionY=VALENCE_Y-BAND_HEIGHT-gapPx;
+        const biasTilt=Math.max(-35,Math.min(35,model.E_Vcm/10000*35));
+        const appliedEnergy=parseFloat(energyCtrl.slider.value);
+        const bandX=30,bandW=logicalWidth-60;
+        const wavelength=model.wavelength;
+        elements.waveMeter.innerText=`${Math.round(wavelength)} nm`;
+        const currentmA=model.I_A*1000;
+        elements.ammeter.innerText = Math.abs(currentmA) < 0.001 && currentmA !== 0 ? `${currentmA.toExponential(2)} mA` : `${currentmA.toFixed(3)} mA`;
+        if(model.T===0){ elements.infoTitle.innerText='Absolute Zero Limit'; elements.infoText.innerText='T = 0 K: thermal carrier generation and the model’s mobility term are set to zero by the simulator boundary condition. The band gap is evaluated at E_g(0).'; }
+        const degenerateWarning = model.degenerate;
+        const freezeOutWarning = model.T>0 && ((model.Nd>0 && model.NdIon/model.Nd<0.5) || (model.Na>0 && model.NaIon/model.Na<0.5));
+        const highFieldWarning = Math.abs(model.E_Vcm) > 5000;
+        if(freezeOutWarning && !document.querySelector('.control-group:hover')){ elements.infoTitle.innerText='Low-Temperature Ionization'; elements.infoText.innerText=`Only ${formatSci(model.Nd>0?model.NdIon:model.NaIon)} cm⁻³ of the selected dopant is ionized in the simplified impurity model. Low-temperature transport remains an educational approximation.`; }
+        else if(degenerateWarning && !document.querySelector('.control-group:hover') && model.T>0){ elements.infoTitle.innerText='Degenerate Carrier Regime'; elements.infoText.innerText='The carrier density is comparable to or above the effective density of states. Fermi–Dirac statistics are being used instead of the Maxwell–Boltzmann approximation.'; }
+        else if(highFieldWarning && !document.querySelector('.control-group:hover')){ elements.infoTitle.innerText='High-Field Transport Limit'; elements.infoText.innerText='The displayed current still uses the low-field drift law J = q(nμₙ+pμₚ)E. At fields above about 5 kV/cm, real carrier velocity saturation and field-dependent mobility can matter.'; }
+        ctx.fillStyle='rgba(0,0,0,0.05)';
+        const phononJitter=Math.min(8,(model.T/300))*1.5;
+        lattice.forEach(lat=>{const lx=bandX+lat.x*bandW+(Math.random()-.5)*phononJitter,ly=lat.yBase+(Math.random()-.5)*phononJitter;ctx.beginPath();ctx.arc(lx,ly,2,0,Math.PI*2);ctx.fill();});
+        drawTiltedBand(conductionY,biasTilt,bandX,bandW,'rgba(74,155,140,.12)','#4A9B8C','Conduction Band (Free states)');
+        drawTiltedBand(VALENCE_Y,biasTilt,bandX,bandW,'rgba(214,93,75,.12)','#D65D4B','Valence Band (Bound states)');
+        const donorOffset=.045*bandScale, acceptorOffset=.045*bandScale;
+        if(model.Nd>0){ctx.beginPath();ctx.setLineDash([5,5]);ctx.moveTo(bandX,getBandY(conductionY+BAND_HEIGHT-donorOffset,0,biasTilt));ctx.lineTo(bandX+bandW,getBandY(conductionY+BAND_HEIGHT-donorOffset,1,biasTilt));ctx.strokeStyle='#D4A373';ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#6B6863';ctx.font='12px monospace';ctx.fillText(`Illustrative donor level (~0.045 eV below Ec)`,bandX+bandW-245,getBandY(conductionY+BAND_HEIGHT-donorOffset,1,biasTilt)+15);}
+        const impurityCount = model.Nd>0 ? Math.min(80,Math.max(4,Math.round(6+8*Math.log10(model.Nd/1e14+1)))) : model.Na>0 ? Math.min(80,Math.max(4,Math.round(6+8*Math.log10(model.Na/1e14+1)))) : 0;
+        if(impurityCount){
+            for(let i=0;i<impurityCount;i++){
+                const ix=bandX+12+(i*37.13%1)*(bandW-24);
+                const ibase=model.Nd>0?conductionY+BAND_HEIGHT-donorOffset:VALENCE_Y+acceptorOffset;
+                const iy=getBandY(ibase,(ix-bandX)/bandW,biasTilt);
+                ctx.beginPath(); ctx.arc(ix,iy,3.5,0,Math.PI*2); ctx.fillStyle=model.Nd>0?'#D4A373':'#D65D4B'; ctx.fill();
+            }
+        }
+        if(model.Na>0){ctx.beginPath();ctx.setLineDash([5,5]);ctx.moveTo(bandX,getBandY(VALENCE_Y+acceptorOffset,0,biasTilt));ctx.lineTo(bandX+bandW,getBandY(VALENCE_Y+acceptorOffset,1,biasTilt));ctx.strokeStyle='#D65D4B';ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#6B6863';ctx.font='12px monospace';ctx.fillText(`Illustrative acceptor level (~0.045 eV above Ev)`,bandX+bandW-260,getBandY(VALENCE_Y+acceptorOffset,1,biasTilt)-8);}
+        if(elements.fermiToggle.checked){const fermiY=VALENCE_Y-model.Ef*bandScale;ctx.beginPath();ctx.setLineDash([8,4]);ctx.moveTo(bandX,getBandY(fermiY,0,biasTilt));ctx.lineTo(bandX+bandW,getBandY(fermiY,1,biasTilt));ctx.strokeStyle='#8B949E';ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#6B6863';ctx.font='12px monospace';ctx.fillText(`Fermi Level (Ef = ${model.Ef.toFixed(3)} eV)`,bandX+10,getBandY(fermiY,0,biasTilt)-5);}
+        for(let i=photons.length-1;i>=0;i--){const p=photons[i];p.life-=.015;if(p.life<=0){photons.splice(i,1);continue;}p.x+=p.vx;p.y+=p.vy;const wx=p.x+Math.sin(p.life*25+p.phase)*6*(p.vy/Math.abs(p.vx||1)),wy=p.y+Math.cos(p.life*25+p.phase)*6;ctx.beginPath();ctx.arc(wx,wy,3.5,0,Math.PI*2);ctx.fillStyle=`rgba(${p.color.r},${p.color.g},${p.color.b},${p.life*p.color.a})`;ctx.shadowBlur=12;ctx.shadowColor=`rgba(${p.color.r},${p.color.g},${p.color.b},1)`;ctx.fill();ctx.shadowBlur=0;}
+        electrons.forEach(e=>{
+            // Applied photon energy controls inter-band excitation; voltage controls
+            // drift within a band. These are deliberately separate mechanisms.
+            const canExcite = appliedEnergy >= model.Eg;
+            const transitionSpeed = 0.035;
+
+            if(canExcite && !e.excited){
+                // The hole is created where the valence electron started.
+                e.holeXRatio = e.xRatio;
+                e.holeYRatio = e.yRatio;
+                e.holeVisible = true;
+                e.transition = Math.min(1, e.transition + transitionSpeed);
+                if(e.transition >= 1) e.excited = true;
+            } else if(!canExcite && e.excited){
+                e.transition = Math.max(0, e.transition - transitionSpeed);
+                if(e.transition <= 0){
+                    spawnPhoton(e.currentX,e.currentY,getPhotonColor(model.Eg>0?1240/model.Eg:1240));
+                    e.excited = false;
+                    e.holeVisible = false;
+                }
+            }
+
+            const valenceY=getBandY(VALENCE_Y,e.xRatio,biasTilt);
+            const conductionYLocal=getBandY(conductionY,e.xRatio,biasTilt);
+            const valenceTarget=valenceY+7+e.yRatio*(BAND_HEIGHT-14);
+            const conductionTarget=conductionYLocal+7+e.yRatio*(BAND_HEIGHT-14);
+            const targetY=valenceTarget+(conductionTarget-valenceTarget)*e.transition;
+
+            if(e!==draggedElectron){
+                e.smoothY += (targetY-e.smoothY)*0.10;
+
+                // Electron drift is opposite the electric field.
+                const electronStep=Math.max(-0.006,Math.min(0.006,
+                    (model.electronDriftVelocity_cm_s/5e5)*0.002));
+                e.xRatio += electronStep;
+                if(e.xRatio>1)e.xRatio-=1;
+                if(e.xRatio<0)e.xRatio+=1;
+
+                // A hole is a positively charged quasiparticle, so its drift is
+                // opposite to the electron drift and in the conventional-current
+                // direction for the same electric field.
+                if(e.holeVisible){
+                    e.holeXRatio -= electronStep;
+                    if(e.holeXRatio>1)e.holeXRatio-=1;
+                    if(e.holeXRatio<0)e.holeXRatio+=1;
+                }
+            }
+
+            const activeBandBase=e.transition>0.5?conductionY:VALENCE_Y;
+            const localTop=getBandY(activeBandBase,e.xRatio,biasTilt)+7;
+            const localBottom=getBandY(activeBandBase,e.xRatio,biasTilt)+BAND_HEIGHT-7;
+            if(e.transition<=0 || e.transition>=1){
+                e.smoothY=Math.max(localTop,Math.min(localBottom,e.smoothY));
+            }
+
+            e.currentX=bandX+10+e.xRatio*(bandW-20)+(Math.random()-.5)*phononJitter;
+            e.currentY=e.smoothY+(Math.random()-.5)*phononJitter;
+
+            // Solid yellow electron.
+            ctx.beginPath();
+            ctx.arc(e.currentX,e.currentY,6,0,Math.PI*2);
+            ctx.fillStyle='#D4A373';
+            ctx.strokeStyle='#BA8E63';
+            ctx.lineWidth=1;
+            ctx.fill();
+            ctx.stroke();
+
+            // Hollow yellow hole. It moves independently in the opposite direction
+            // to the conduction-band electron.
+            if(e.holeVisible && (e.excited || e.transition>0.12)){
+                const hx=bandX+10+e.holeXRatio*(bandW-20);
+                const holeBaseY=getBandY(VALENCE_Y,e.holeXRatio,biasTilt);
+                const hy=holeBaseY+7+e.holeYRatio*(BAND_HEIGHT-14);
+                e.holeX=hx;
+                e.holeY=hy;
+
+                ctx.beginPath();
+                ctx.arc(hx,hy,6,0,Math.PI*2);
+                ctx.fillStyle='rgba(255,255,255,0.85)';
+                ctx.strokeStyle='#D4A373';
+                ctx.lineWidth=2;
+                ctx.fill();
+                ctx.stroke();
+            }
+        })
+        requestAnimationFrame(draw);
+    }
+    resetPopulation();
+    draw();
+</script>
+</body>
+</html>
